@@ -1,0 +1,8 @@
+name: tview
+version: 0.1.0
+usage: "Render 'helm template' to files and browse via TUI"
+description: |
+  Runs 'helm template' into a temporary output directory and opens
+  a TUI file picker with previews for easy per-file inspection.
+
+command: "$HELM_PLUGIN_DIR/tview.sh"

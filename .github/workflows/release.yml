@@ -15,10 +15,10 @@ jobs:
       - name: Derive version
         id: ver
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      - name: Prepare tarball
+      - name: Prepare tarball (root plugin files)
         run: |
           mkdir -p dist
-          tar -C plugin -czf dist/tview-${{ steps.ver.outputs.version }}.tgz .
+          tar -czf dist/tview-${{ steps.ver.outputs.version }}.tgz plugin.yaml tview.sh
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:

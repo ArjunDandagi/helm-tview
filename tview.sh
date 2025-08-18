@@ -209,7 +209,7 @@ if command -v fzf >/dev/null 2>&1; then
     --prompt='tview> ' \
     --header=$([[ -n "$TVIEW_SEARCH" ]] && printf '%q' "Search: $TVIEW_SEARCH  •  Navigate with arrows • Enter: open • ESC: quit" || printf '%q' 'Navigate with arrows • Enter: open • ESC: quit') \
     --preview-window='right,70%,border-left' \
-    --preview "bash -lc 'f=\"{3}\"; if [[ -f \"\$f\" ]]; then if [[ -n \"$TVIEW_SEARCH\" ]] && command -v rg >/dev/null 2>&1; then rg --color=always -n -S --passthru -e \"$TVIEW_SEARCH\" \"$f\" | sed -n \"1,400p\"; else if command -v bat >/dev/null 2>&1; then bat --style=header,numbers --color=always --paging=never \"$f\"; else sed -n \"1,400p\" \"$f\"; fi; fi; fi'"
+    --preview 'bash -lc '\''f="{3}"; if [[ -f "$f" ]]; then if [[ -n "${TVIEW_SEARCH:-}" ]] && command -v rg >/dev/null 2>&1; then rg --color=always -n -S --passthru -e "${TVIEW_SEARCH}" "$f" | sed -n "1,400p"; else if command -v bat >/dev/null 2>&1; then bat --style=header,numbers --color=always --paging=never "$f"; else sed -n "1,400p" "$f"; fi; fi; fi'\''
   ) || true
   if [[ -n "${SELECTED:-}" ]]; then
     sel_path=$(printf '%s' "$SELECTED" | awk -F '\t' '{print $3}')

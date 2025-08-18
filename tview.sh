@@ -8,19 +8,34 @@ show_help() {
 Helm TUI Template Viewer (tview)
 
 Usage:
-  helm tview [NAME] [CHART] [flags]
+  helm tview [RELEASE_NAME] [CHART] [template flags...] [-s|--search STRING]
+
+What it does:
+  - Renders 'helm template' into a temporary directory
+  - Opens a split-view TUI: left = files, right = preview
+  - Lets you open a file in a pager with Enter
 
 Flags:
-  -s, --search STRING   Only list files containing STRING and highlight matches in preview
+  -s, --search STRING   Pre-filter file list to only files containing STRING
+                        and highlight matches in the preview (uses ripgrep if
+                        available with smart-case; falls back to grep).
+  -h, --help            Show this help and exit
 
 Examples:
-  helm tview myrelease ./chart -f values.yaml
-  helm tview myrelease bitnami/nginx --set image.tag=latest
+  # Basic (from a chart directory containing Chart.yaml)
+  helm tview .
 
-Notes:
-  - Behaves like 'helm template' but writes manifests to a temporary directory
-    and opens a TUI browser so you can preview each output file individually.
-  - Any provided --output-dir is ignored (the plugin manages its own temp dir).
+  # With release name and values
+  helm tview myrel ./chart -f values.yaml
+
+  # Search for a term across rendered files
+  helm tview . --search ServiceAccount
+  helm tview . -s image:tag
+
+Tips:
+  - Type to fuzzy-filter the left list; use -s/--search to filter by content
+  - Install fzf and bat for best experience (brew install fzf bat)
+  - Temporary directory is cleaned on exit. Set DEBUG=1 to keep it
 EOF
 }
 

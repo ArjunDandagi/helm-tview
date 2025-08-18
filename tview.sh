@@ -10,6 +10,9 @@ Helm TUI Template Viewer (tview)
 Usage:
   helm tview [NAME] [CHART] [flags]
 
+Flags:
+  -s, --search STRING   Only list files containing STRING and highlight matches in preview
+
 Examples:
   helm tview myrelease ./chart -f values.yaml
   helm tview myrelease bitnami/nginx --set image.tag=latest
@@ -61,9 +64,16 @@ trap cleanup EXIT
 
 CLEAN_ARGS=()
 SKIP_NEXT=0
+EXPECTING_SEARCH=0
+SEARCH_PAT=""
 for arg in "$@"; do
   if [[ $SKIP_NEXT -eq 1 ]]; then
     SKIP_NEXT=0
+    continue
+  fi
+  if [[ $EXPECTING_SEARCH -eq 1 ]]; then
+    SEARCH_PAT="$arg"
+    EXPECTING_SEARCH=0
     continue
   fi
   case "$arg" in
@@ -72,11 +82,18 @@ for arg in "$@"; do
       ;;
     --output-dir=*)
       ;;
+    -s|--search)
+      EXPECTING_SEARCH=1
+      ;;
+    --search=*)
+      SEARCH_PAT="${arg#--search=}"
+      ;;
     *)
       CLEAN_ARGS+=("$arg")
       ;;
   esac
 done
+export TVIEW_SEARCH="$SEARCH_PAT"
 
 POSITIONAL=()
 for a in "${CLEAN_ARGS[@]}"; do
@@ -144,6 +161,30 @@ if ! [[ -s "$LIST_FILE" ]]; then
   exit 1
 fi
 
+# Build search matches file if requested
+MATCH_FILE="$WORK_DIR/matches.txt"
+if [[ -n "$TVIEW_SEARCH" ]]; then
+  > "$MATCH_FILE"
+  if command -v rg >/dev/null 2>&1; then
+    MATCHED=$(rg -l -S -e "$TVIEW_SEARCH" "$OUT_DIR" || true)
+  else
+    MATCHED=$(grep -R -l -- "$TVIEW_SEARCH" "$OUT_DIR" || true)
+  fi
+  if [[ -n "$MATCHED" ]]; then
+    while IFS= read -r mf; do
+      [[ -z "$mf" ]] && continue
+      rel=${mf#"$OUT_DIR/"}
+      base=${rel##*/}
+      dir=${rel%/*}
+      [[ "$dir" == "$rel" ]] && dir=""
+      kind=$(grep -m1 -E '^[[:space:]]*kind:[[:space:]]*' "$mf" | sed -E 's/^[[:space:]]*kind:[[:space:]]*//; s/[[:space:]]+$//' || true)
+      label_plain="$base"; [[ -n "$dir" ]] && label_plain+="  — $dir"; [[ -n "$kind" ]] && label_plain+="  [$kind]"
+      label_ansi="${BOLD}${base}${RESET}"; [[ -n "$dir" ]] && label_ansi+="  ${DIM}${dir}${RESET}"; [[ -n "$kind" ]] && label_ansi+="  ${CYAN}[${kind}]${RESET}"
+      printf '%s\t%s\t%s\n' "$label_plain" "$label_ansi" "$mf" >> "$MATCH_FILE"
+    done <<< "$MATCHED"
+  fi
+fi
+
 BAT_CMD=""
 if command -v bat >/dev/null 2>&1; then
   BAT_CMD="bat"
@@ -161,13 +202,14 @@ open_cmd() {
 
 if command -v fzf >/dev/null 2>&1; then
   FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:-} --layout=reverse --border --height=100%"
-  SELECTED=$(cat "$LIST_FILE" | FZF_DEFAULT_OPTS="$FZF_DEFAULT_OPTS" fzf \
+  SELECT_SOURCE="$LIST_FILE"; [[ -n "$TVIEW_SEARCH" && -s "$MATCH_FILE" ]] && SELECT_SOURCE="$MATCH_FILE"
+  SELECTED=$(cat "$SELECT_SOURCE" | FZF_DEFAULT_OPTS="$FZF_DEFAULT_OPTS" fzf \
     --ansi \
     --delimiter='\t' --with-nth=2 \
     --prompt='tview> ' \
-    --header='Navigate with arrows • Enter: open • ESC: quit' \
+    --header=$([[ -n "$TVIEW_SEARCH" ]] && printf '%q' "Search: $TVIEW_SEARCH  •  Navigate with arrows • Enter: open • ESC: quit" || printf '%q' 'Navigate with arrows • Enter: open • ESC: quit') \
     --preview-window='right,70%,border-left' \
-    --preview "bash -lc 'f=\"{3}\"; if [[ -f \"\$f\" ]]; then if command -v bat >/dev/null 2>&1; then bat --style=header,numbers --color=always --paging=never \"\$f\"; else sed -n \"1,400p\" \"\$f\"; fi; fi'"
+    --preview "bash -lc 'f=\"{3}\"; if [[ -f \"\$f\" ]]; then if [[ -n \"$TVIEW_SEARCH\" ]] && command -v rg >/dev/null 2>&1; then rg --color=always -n -S --passthru -e \"$TVIEW_SEARCH\" \"$f\" | sed -n \"1,400p\"; else if command -v bat >/dev/null 2>&1; then bat --style=header,numbers --color=always --paging=never \"$f\"; else sed -n \"1,400p\" \"$f\"; fi; fi; fi'"
   ) || true
   if [[ -n "${SELECTED:-}" ]]; then
     sel_path=$(printf '%s' "$SELECTED" | awk -F '\t' '{print $3}')
@@ -181,10 +223,11 @@ fi
 # Fallback menu
 LABELS=()
 PATHS=()
+SELECT_SOURCE_FILE="$LIST_FILE"; [[ -n "$TVIEW_SEARCH" && -s "$MATCH_FILE" ]] && SELECT_SOURCE_FILE="$MATCH_FILE"
 while IFS=$'\t' read -r label _ path; do
   LABELS+=("$label")
   PATHS+=("$path")
-done < "$LIST_FILE"
+done < "$SELECT_SOURCE_FILE"
 
 while true; do
   echo ""

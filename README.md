@@ -32,6 +32,16 @@ helm tview .
 
 # or specify release and chart
 helm tview myrel ./path/to/chart -f values.yaml
+
+### Search
+
+Filter to files containing a string and highlight matches in the preview:
+
+```bash
+helm tview . --search ServiceAccount
+# or
+helm tview . -s image:tag
+```
 ```
 
 ## Requirements

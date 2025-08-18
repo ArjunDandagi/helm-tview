@@ -202,14 +202,42 @@ open_cmd() {
 
 if command -v fzf >/dev/null 2>&1; then
   FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:-} --layout=reverse --border --height=100%"
+
+  PREVIEW_SCRIPT="$WORK_DIR/preview.sh"
+  cat > "$PREVIEW_SCRIPT" <<'EOS'
+#!/usr/bin/env bash
+set -euo pipefail
+file_path="${1:-}"
+if [[ -z "$file_path" || ! -f "$file_path" ]]; then
+  exit 0
+fi
+search="${TVIEW_SEARCH:-}"
+if [[ -n "$search" ]] && command -v rg >/dev/null 2>&1; then
+  rg --color=always -n -S --passthru -e "$search" "$file_path" | sed -n '1,400p'
+else
+  if command -v bat >/dev/null 2>&1; then
+    bat --style=header,numbers --color=always --paging=never "$file_path"
+  else
+    sed -n '1,400p' "$file_path"
+  fi
+fi
+EOS
+  chmod +x "$PREVIEW_SCRIPT"
+
+  if [[ -n "${TVIEW_SEARCH:-}" ]]; then
+    HEADER_MSG="Search: $TVIEW_SEARCH  •  Navigate with arrows • Enter: open • ESC: quit"
+  else
+    HEADER_MSG='Navigate with arrows • Enter: open • ESC: quit'
+  fi
+
   SELECT_SOURCE="$LIST_FILE"; [[ -n "$TVIEW_SEARCH" && -s "$MATCH_FILE" ]] && SELECT_SOURCE="$MATCH_FILE"
   SELECTED=$(cat "$SELECT_SOURCE" | FZF_DEFAULT_OPTS="$FZF_DEFAULT_OPTS" fzf \
     --ansi \
     --delimiter='\t' --with-nth=2 \
     --prompt='tview> ' \
-    --header=$([[ -n "$TVIEW_SEARCH" ]] && printf '%q' "Search: $TVIEW_SEARCH  •  Navigate with arrows • Enter: open • ESC: quit" || printf '%q' 'Navigate with arrows • Enter: open • ESC: quit') \
+    --header="$HEADER_MSG" \
     --preview-window='right,70%,border-left' \
-    --preview 'bash -lc '\''f="{3}"; if [[ -f "$f" ]]; then if [[ -n "${TVIEW_SEARCH:-}" ]] && command -v rg >/dev/null 2>&1; then rg --color=always -n -S --passthru -e "${TVIEW_SEARCH}" "$f" | sed -n "1,400p"; else if command -v bat >/dev/null 2>&1; then bat --style=header,numbers --color=always --paging=never "$f"; else sed -n "1,400p" "$f"; fi; fi; fi'\''
+    --preview "$PREVIEW_SCRIPT {3}"
   ) || true
   if [[ -n "${SELECTED:-}" ]]; then
     sel_path=$(printf '%s' "$SELECTED" | awk -F '\t' '{print $3}')
